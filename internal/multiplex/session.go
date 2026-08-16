@@ -56,7 +56,7 @@ type Session struct {
 	// atomic
 	activeStreamCount uint32
 
-	streamsM sync.Mutex
+	streamsM sync.RWMutex
 	streams  map[uint32]*Stream
 	// For accepting new streams
 	acceptCh chan *Stream
@@ -240,28 +240,45 @@ func (sesh *Session) recvDataFromRemote(data []byte) error {
 		return sesh.passiveClose()
 	}
 
-	sesh.streamsM.Lock()
+	// Fast path: try read lock for existing streams (the common case)
+	sesh.streamsM.RLock()
 	if sesh.IsClosed() {
-		sesh.streamsM.Unlock()
+		sesh.streamsM.RUnlock()
 		return ErrBrokenSession
 	}
 	existingStream, existing := sesh.streams[frame.StreamID]
 	if existing {
-		sesh.streamsM.Unlock()
+		sesh.streamsM.RUnlock()
 		if existingStream == nil {
 			// this is when the stream existed before but has since been closed. We do nothing
 			return nil
 		}
 		return existingStream.recvFrame(frame)
-	} else {
-		newStream := makeStream(sesh, frame.StreamID)
-		sesh.streams[frame.StreamID] = newStream
-		sesh.acceptCh <- newStream
-		sesh.streamsM.Unlock()
-		// new stream
-		sesh.streamCountIncr()
-		return newStream.recvFrame(frame)
 	}
+	sesh.streamsM.RUnlock()
+
+	// Slow path: new stream, need write lock
+	sesh.streamsM.Lock()
+	// re-check under write lock in case another goroutine created it
+	existingStream, existing = sesh.streams[frame.StreamID]
+	if existing {
+		sesh.streamsM.Unlock()
+		if existingStream == nil {
+			return nil
+		}
+		return existingStream.recvFrame(frame)
+	}
+	if sesh.IsClosed() {
+		sesh.streamsM.Unlock()
+		return ErrBrokenSession
+	}
+	newStream := makeStream(sesh, frame.StreamID)
+	sesh.streams[frame.StreamID] = newStream
+	sesh.acceptCh <- newStream
+	sesh.streamsM.Unlock()
+	// new stream
+	sesh.streamCountIncr()
+	return newStream.recvFrame(frame)
 }
 
 func (sesh *Session) SetTerminalMsg(msg string) {

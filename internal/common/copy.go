@@ -35,7 +35,14 @@ package common
 import (
 	"io"
 	"net"
+	"sync"
 )
+
+// copyBufPool reuses 32 KiB buffers across Copy calls to reduce GC pressure.
+var copyBufPool = sync.Pool{New: func() interface{} {
+	b := make([]byte, 32*1024)
+	return &b
+}}
 
 func Copy(dst net.Conn, src net.Conn) (written int64, err error) {
 	defer func() { src.Close(); dst.Close() }()
@@ -50,8 +57,9 @@ func Copy(dst net.Conn, src net.Conn) (written int64, err error) {
 		return rt.ReadFrom(src)
 	}
 
-	size := 32 * 1024
-	buf := make([]byte, size)
+	bufP := copyBufPool.Get().(*[]byte)
+	buf := *bufP
+	defer copyBufPool.Put(bufP)
 	for {
 		nr, er := src.Read(buf)
 		if nr > 0 {

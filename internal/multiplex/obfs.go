@@ -3,10 +3,12 @@ package multiplex
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand/v2"
+	"sync"
+
 	"github.com/cbeuw/Cloak/internal/common"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/salsa20"
@@ -29,6 +31,29 @@ const (
 	EncryptionMethodChaha20Poly1305
 	EncryptionMethodAES128GCM
 )
+
+// obfsRandPool provides per-goroutine ChaCha8 PRNG instances seeded with
+// cryptographic randomness. This avoids the expensive crypto/rand syscall on
+// every frame while still producing high-quality, unpredictable bytes.
+var obfsRandPool = sync.Pool{New: func() interface{} {
+	var state [32]byte
+	common.CryptoRandRead(state[:])
+	return rand.New(rand.NewChaCha8(state))
+}}
+
+// fillRandBytes fills buf with pseudo-random bytes from r.
+func fillRandBytes(r *rand.Rand, buf []byte) {
+	for i := 0; i+8 <= len(buf); i += 8 {
+		binary.LittleEndian.PutUint64(buf[i:], r.Uint64())
+	}
+	if rem := len(buf) % 8; rem > 0 {
+		v := r.Uint64()
+		start := len(buf) - rem
+		for j := 0; j < rem; j++ {
+			buf[start+j] = byte(v >> (8 * j))
+		}
+	}
+}
 
 // Obfuscator is responsible for serialisation, obfuscation, and optional encryption of data frames.
 type Obfuscator struct {
@@ -66,19 +91,23 @@ func (o *Obfuscator) obfuscate(f *Frame, buf []byte, payloadOffsetInBuf int) (in
 		return 0, errors.New("payload cannot be empty")
 	}
 	tagLen := 0
+	nonceSize := 0
 	if o.payloadCipher != nil {
 		tagLen = o.payloadCipher.Overhead()
+		nonceSize = o.payloadCipher.NonceSize()
 	} else {
 		tagLen = salsa20NonceSize
 	}
 	// Pad to avoid size side channel leak
 	padLen := 0
+	rr := obfsRandPool.Get().(*rand.Rand)
 	if f.Seq < padFirstNFrames {
-		padLen = common.RandInt(maxExtraLen - tagLen + 1)
+		padLen = int(rr.Uint32N(uint32(maxExtraLen - tagLen + 1)))
 	}
 
 	usefulLen := frameHeaderLength + payloadLen + padLen + tagLen
 	if len(buf) < usefulLen {
+		obfsRandPool.Put(rr)
 		return 0, errors.New("obfs buffer too small")
 	}
 	// we do as much in-place as possible to save allocation
@@ -94,14 +123,20 @@ func (o *Obfuscator) obfuscate(f *Frame, buf []byte, payloadOffsetInBuf int) (in
 	header[12] = f.Closing
 	header[13] = byte(padLen + tagLen)
 
-	// Random bytes for padding and nonce
-	_, err := rand.Read(buf[frameHeaderLength+payloadLen : usefulLen])
-	if err != nil {
-		return 0, fmt.Errorf("failed to pad random: %w", err)
-	}
-
 	if o.payloadCipher != nil {
-		o.payloadCipher.Seal(payload[:0], header[:o.payloadCipher.NonceSize()], payload, nil)
+		// When encrypted, the AEAD tag overwrites the last tagLen bytes of the
+		// random region, so only padding bytes need to be random. When padLen
+		// is 0 (after the first padFirstNFrames frames) no random bytes are
+		// needed at all — the Salsa20 nonce is derived from the AEAD tag.
+		if padLen > 0 {
+			fillRandBytes(rr, buf[frameHeaderLength+payloadLen:frameHeaderLength+payloadLen+padLen])
+		}
+		obfsRandPool.Put(rr)
+		o.payloadCipher.Seal(payload[:0], header[:nonceSize], payload, nil)
+	} else {
+		// Plain mode: random bytes needed for both padding and Salsa20 nonce
+		fillRandBytes(rr, buf[frameHeaderLength+payloadLen:usefulLen])
+		obfsRandPool.Put(rr)
 	}
 
 	nonce := buf[usefulLen-salsa20NonceSize : usefulLen]

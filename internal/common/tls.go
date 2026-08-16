@@ -18,7 +18,10 @@ const (
 	Handshake       = 22
 	ApplicationData = 23
 
-	initialWriteBufSize = 14336
+	// initialWriteBufSize accommodates the maximum TLS record size
+	// (1<<14+256 per RFC 8446 §5.2) plus the 5-byte record layer header,
+	// so that the write buffer pool never needs to reallocate.
+	initialWriteBufSize = 1<<14 + 256 + recordLayerLength
 )
 
 func AddRecordLayer(input []byte, typ byte, ver uint16) []byte {

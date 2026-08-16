@@ -6,14 +6,17 @@ version=$(shell ver=$$(git log -n 1 --pretty=oneline --format=%D | awk -F, '{pri
 	fi ; \
 	echo $$ver)
 
+GOFLAGS=-trimpath
+LDFLAGS=-s -w
+
 client: 
 	mkdir -p build
-	go build -ldflags "-X main.version=${version}" ./cmd/ck-client 
+	go build $(GOFLAGS) -ldflags "$(LDFLAGS) -X main.version=${version}" ./cmd/ck-client 
 	mv ck-client* ./build
 
 server: 
 	mkdir -p build
-	go build -ldflags "-X main.version=${version}" ./cmd/ck-server
+	go build $(GOFLAGS) -ldflags "$(LDFLAGS) -X main.version=${version}" ./cmd/ck-server
 	mv ck-server* ./build
 
 install:

@@ -8,43 +8,76 @@ name: Create Release
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # ck-client targets
+          - target: linux-amd64
+            goos: linux
+            goarch: amd64
+            cmd: ck-client
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            cmd: ck-client
+          - target: windows-amd64
+            goos: windows
+            goarch: amd64
+            cmd: ck-client
+          # ck-server targets
+          - target: linux-amd64
+            goos: linux
+            goarch: amd64
+            cmd: ck-server
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            cmd: ck-server
+          - target: windows-amd64
+            goos: windows
+            goarch: amd64
+            cmd: ck-server
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        run: |
-          export PATH=${PATH}:`go env GOPATH`/bin
-          v=${GITHUB_REF#refs/*/} ./release.sh
-      - name: Release
-        uses: softprops/action-gh-release@v1
+      - uses: actions/setup-go@v5
         with:
-          files: release/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          go-version: '^1.24'
+      - name: Build ${{ matrix.cmd }} for ${{ matrix.target }}
+        run: |
+          mkdir -p release
+          VERSION=${GITHUB_REF#refs/*/}
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "release/${{ matrix.cmd }}-${{ matrix.target }}${EXT}" ./cmd/${{ matrix.cmd }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}-${{ matrix.cmd }}
+          path: release/
 
-  build-docker:
+  release:
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
+      - uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          images: |
-            cbeuw/cloak
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+          path: release
+          merge-multiple: true
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+          cat checksums.txt
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          files: |
+            release/*
+            release/checksums.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
