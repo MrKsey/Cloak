@@ -38,6 +38,10 @@ func main() {
 
 	log_init()
 
+	if version != "" {
+		log.Infof("ck-client version: %s", version)
+	}
+
 	ssPluginMode := os.Getenv("SS_LOCAL_HOST") != ""
 
 	verbosity := flag.String("verbosity", "info", "verbosity level")

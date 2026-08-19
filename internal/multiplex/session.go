@@ -118,6 +118,7 @@ func MakeSession(id uint32, config SessionConfig) *Session {
 	}}
 
 	sesh.sb = makeSwitchboard(sesh)
+	log.Debugf("session %v created with InactivityTimeout=%v, singleplex=%v", id, sesh.InactivityTimeout, config.Singleplex)
 	time.AfterFunc(sesh.InactivityTimeout, sesh.checkTimeout)
 	return sesh
 }
@@ -343,6 +344,7 @@ func (sesh *Session) IsClosed() bool {
 
 func (sesh *Session) checkTimeout() {
 	if sesh.streamCount() == 0 && !sesh.IsClosed() {
+		log.Infof("session %v inactivity timeout after %v with 0 streams, closing", sesh.id, sesh.InactivityTimeout)
 		sesh.SetTerminalMsg("timeout")
 		sesh.Close()
 	}

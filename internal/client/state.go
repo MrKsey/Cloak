@@ -281,6 +281,7 @@ func (raw *RawConfig) ProcessRawConfig(worldState common.WorldState) (local Loca
 	} else {
 		remote.InactivityTimeout = 300 * time.Second
 	}
+	log.Infof("SessionIdleTimeout: config=%vs, effective=%v", raw.SessionIdleTimeout, remote.InactivityTimeout)
 
 	if raw.LocalHost == "" {
 		return nullErr("LocalHost")
