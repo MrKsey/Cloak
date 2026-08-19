@@ -33,13 +33,14 @@ type RawConfig struct {
 	RemotePort       string   // jsonOptional
 	AlternativeNames []string // jsonOptional
 	// defaults set in ProcessRawConfig
-	UDP           bool   // nullable
-	BrowserSig    string // nullable
-	Transport     string // nullable
-	CDNOriginHost string // nullable
-	CDNWsUrlPath  string // nullable
-	StreamTimeout int    // nullable
-	KeepAlive     int    // nullable
+	UDP                bool   // nullable
+	BrowserSig         string // nullable
+	Transport          string // nullable
+	CDNOriginHost      string // nullable
+	CDNWsUrlPath       string // nullable
+	StreamTimeout      int    // nullable
+	KeepAlive          int    // nullable
+	SessionIdleTimeout int    // nullable
 }
 
 type RemoteConnConfig struct {
@@ -48,6 +49,11 @@ type RemoteConnConfig struct {
 	KeepAlive  time.Duration
 	RemoteAddr string
 	Transport  TransportConfig
+
+	// InactivityTimeout is how long a session will stay open with no active
+	// streams before it closes itself. This prevents frequently re-establishing
+	// TLS connections (and thus frequent handshakes visible to a DPI).
+	InactivityTimeout time.Duration
 }
 
 type LocalConnConfig struct {
@@ -255,10 +261,25 @@ func (raw *RawConfig) ProcessRawConfig(worldState common.WorldState) (local Loca
 	}
 
 	// KeepAlive
-	if raw.KeepAlive <= 0 {
+	// KeepAlive keeps the TCP connections to the Cloak server alive so that
+	// broken connections are detected quickly. A value of 0 uses a sensible
+	// default; a negative value disables it.
+	if raw.KeepAlive < 0 {
 		remote.KeepAlive = -1
+	} else if raw.KeepAlive > 0 {
+		remote.KeepAlive = time.Duration(raw.KeepAlive) * time.Second
 	} else {
-		remote.KeepAlive = remote.KeepAlive * time.Second
+		remote.KeepAlive = 30 * time.Second
+	}
+
+	// SessionIdleTimeout controls how long a session persists with no active
+	// streams before it closes itself. A longer value reduces the frequency of
+	// new TLS handshakes (which are more visible to DPI). A value of 0 uses a
+	// sensible default.
+	if raw.SessionIdleTimeout > 0 {
+		remote.InactivityTimeout = time.Duration(raw.SessionIdleTimeout) * time.Second
+	} else {
+		remote.InactivityTimeout = 300 * time.Second
 	}
 
 	if raw.LocalHost == "" {

@@ -194,6 +194,7 @@ func dispatchConnection(conn net.Conn, sta *State) {
 		Valve:              nil,
 		Unordered:          ci.Unordered,
 		MsgOnWireSizeLimit: appDataMaxLength,
+		InactivityTimeout:  sta.InactivityTimeout,
 	}
 
 	// adminUID can use the server as normal with unlimited QoS credits. The adminUID is not

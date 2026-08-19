@@ -16,15 +16,16 @@ import (
 )
 
 type RawConfig struct {
-	ProxyBook    map[string][]string
-	BindAddr     []string
-	BypassUID    [][]byte
-	RedirAddr    string
-	PrivateKey   []byte
-	AdminUID     []byte
-	DatabasePath string
-	KeepAlive    int
-	CncMode      bool
+	ProxyBook          map[string][]string
+	BindAddr           []string
+	BypassUID          [][]byte
+	RedirAddr          string
+	PrivateKey         []byte
+	AdminUID           []byte
+	DatabasePath       string
+	KeepAlive          int
+	CncMode            bool
+	SessionIdleTimeout int
 }
 
 // State type stores the global state of the program
@@ -42,6 +43,9 @@ type State struct {
 	RedirHost   net.Addr
 	RedirPort   string
 	RedirDialer common.Dialer
+
+	// InactivityTimeout is applied to every session created on this server.
+	InactivityTimeout time.Duration
 
 	usedRandomM sync.RWMutex
 	UsedRandom  map[[32]byte]int64
@@ -156,10 +160,22 @@ func InitState(preParse RawConfig, worldState common.WorldState) (sta *State, er
 		sta.Panel = MakeUserPanel(manager)
 	}
 
-	if preParse.KeepAlive <= 0 {
+	if preParse.KeepAlive < 0 {
 		sta.ProxyDialer = &net.Dialer{KeepAlive: -1}
-	} else {
+	} else if preParse.KeepAlive > 0 {
 		sta.ProxyDialer = &net.Dialer{KeepAlive: time.Duration(preParse.KeepAlive) * time.Second}
+	} else {
+		sta.ProxyDialer = &net.Dialer{KeepAlive: 30 * time.Second}
+	}
+
+	// SessionIdleTimeout controls how long a session persists with no active
+	// streams before it closes itself. A longer value reduces the frequency of
+	// new TLS handshakes (which are more visible to DPI). A value of 0 uses a
+	// sensible default.
+	if preParse.SessionIdleTimeout > 0 {
+		sta.InactivityTimeout = time.Duration(preParse.SessionIdleTimeout) * time.Second
+	} else {
+		sta.InactivityTimeout = 300 * time.Second
 	}
 
 	sta.RedirHost, sta.RedirPort, err = parseRedirAddr(preParse.RedirAddr)

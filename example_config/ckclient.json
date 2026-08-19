@@ -7,5 +7,7 @@
   "ServerName": "www.bing.com",
   "NumConn": 4,
   "BrowserSig": "chrome",
-  "StreamTimeout": 300
+  "StreamTimeout": 300,
+  "KeepAlive": 30,
+  "SessionIdleTimeout": 300
 }

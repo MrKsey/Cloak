@@ -70,6 +70,7 @@ func MakeSession(connConfig RemoteConnConfig, authInfo AuthInfo, dialer common.D
 		Valve:              nil,
 		Unordered:          authInfo.Unordered,
 		MsgOnWireSizeLimit: appDataMaxLength,
+		InactivityTimeout:  connConfig.InactivityTimeout,
 	}
 	sesh := mux.MakeSession(authInfo.SessionId, seshConfig)
 

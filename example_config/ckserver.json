@@ -23,5 +23,7 @@
   "RedirAddr": "cloudflare.com",
   "PrivateKey": "---Private key here---",
   "AdminUID": "---Admin UID here (optional)---",
-  "DatabasePath": "userinfo.db"
+  "DatabasePath": "userinfo.db",
+  "KeepAlive": 30,
+  "SessionIdleTimeout": 300
 }

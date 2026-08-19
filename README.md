@@ -48,6 +48,11 @@ End-to-end integration improvements (16 KiB frames):
 
 Latency reduced by 9-35% across all encryption methods.
 
+### Session stability improvements
+
+- **Configurable `SessionIdleTimeout`** (client and server): controls how long a session persists with no active streams before closing. Previously hardcoded to 30 seconds, causing frequent session churn and repeated TLS handshakes (more visible to DPI). Default is now 300 seconds (5 minutes).
+- **Fixed `KeepAlive` bug on the client**: the client config's `KeepAlive` was silently ignored due to a multiplication bug. Now correctly applied, with a sensible default of 30 seconds when unset.
+
 ---
 
 ## Quick Start
@@ -127,7 +132,9 @@ Example:
 
 `DatabasePath` — path to `userinfo.db` for storing user usage info. Leave empty if you only use `BypassUID`.
 
-`KeepAlive` — TCP KeepAlive seconds for the upstream proxy connection. Zero or negative disables it. Default: 0.
+`KeepAlive` — TCP KeepAlive seconds for the upstream proxy connection. `0` uses a sensible default (30s); a negative value disables it. Default: 30.
+
+`SessionIdleTimeout` — seconds a session stays open with no active streams before it closes itself. A longer value reduces the frequency of new TLS handshakes (which are more visible to DPI). `0` uses a sensible default. Default: 300 (5 minutes).
 
 ### Client
 
@@ -153,9 +160,11 @@ Example:
 
 `BrowserSig` — browser signature to emulate: `chrome`, `firefox`, or `safari`.
 
-`KeepAlive` — TCP KeepAlive seconds for the Cloak server connection. Default: 0 (disabled).
+`KeepAlive` — TCP KeepAlive seconds for the Cloak server connection. `0` uses a sensible default (30s); a negative value disables it. Default: 30.
 
-`StreamTimeout` — seconds Cloak waits for an incoming connection to send data before closing it.
+`StreamTimeout` — seconds Cloak waits for an incoming connection to send its first byte of data before closing it. Default: 300.
+
+`SessionIdleTimeout` — seconds a session stays open with no active streams before it closes itself. A longer value reduces the frequency of new TLS handshakes (which are more visible to DPI). `0` uses a sensible default. Default: 300 (5 minutes).
 
 ## Setup
 
