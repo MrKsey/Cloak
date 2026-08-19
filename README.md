@@ -162,7 +162,7 @@ Example:
 
 `KeepAlive` — TCP KeepAlive seconds for the Cloak server connection. `0` uses a sensible default (30s); a negative value disables it. Default: 30.
 
-`StreamTimeout` — seconds Cloak waits for an incoming connection to send its first byte of data before closing it. Default: 300.
+`StreamTimeout` — seconds ck-client waits for the first byte from the proxy application after it connects. Proxy clients send data immediately, so a short value is sufficient. `0` uses a sensible default. Default: 30.
 
 `SessionIdleTimeout` — seconds a session stays open with no active streams before it closes itself. A longer value reduces the frequency of new TLS handshakes (which are more visible to DPI). `0` uses a sensible default. Default: 300 (5 minutes).
 

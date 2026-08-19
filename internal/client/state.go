@@ -290,8 +290,11 @@ func (raw *RawConfig) ProcessRawConfig(worldState common.WorldState) (local Loca
 	}
 	local.LocalAddr = net.JoinHostPort(raw.LocalHost, raw.LocalPort)
 	// stream no write timeout
+	// StreamTimeout is how long ck-client waits for the first byte from the
+	// proxy application after it connects. Proxy clients send data immediately,
+	// so a short value is sufficient. 0 uses a sensible default.
 	if raw.StreamTimeout == 0 {
-		local.Timeout = 300 * time.Second
+		local.Timeout = 30 * time.Second
 	} else {
 		local.Timeout = time.Duration(raw.StreamTimeout) * time.Second
 	}
