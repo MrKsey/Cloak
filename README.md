@@ -21,13 +21,10 @@ The original code called `crypto/rand.Read` on every frame to generate padding a
 ### 2. Skipped unnecessary random generation for encrypted frames
 When AEAD encryption is enabled, the last bytes of the random region are overwritten by the AEAD authentication tag. The original code generated random bytes that were immediately discarded. This fork only generates random bytes when they are actually needed (padding for the first 5 frames, or nonce for plain mode).
 
-### 3. Read-write lock for stream dispatch
-Replaced `sync.Mutex` with `sync.RWMutex` for the stream map. Incoming frames for existing streams (the common case) now take a cheap read lock instead of an exclusive write lock, reducing contention under high concurrency.
-
-### 4. Buffer pool for connection copying
+### 3. Buffer pool for connection copying
 The `Copy` function now uses a `sync.Pool` for its 32 KiB buffer instead of allocating per call, reducing GC pressure with many concurrent connections.
 
-### 5. Fixed TLS write buffer sizing
+### 4. Fixed TLS write buffer sizing
 Increased the TLS connection write buffer pool capacity to match the maximum TLS record size (RFC 8446 §5.2), eliminating buffer reallocations for large frames.
 
 ### Benchmark Results
@@ -36,10 +33,10 @@ Obfuscation throughput improvements (1 KiB frames, single-threaded):
 
 | Encryption | Original | Optimized | Speedup |
 |---|---|---|---|
-| plain | 1,699 MB/s | 4,044 MB/s | **2.4x** |
-| AES-128-GCM | 1,103 MB/s | 1,809 MB/s | **1.6x** |
-| AES-256-GCM | 1,034 MB/s | 1,488 MB/s | **1.4x** |
-| ChaCha20-Poly1305 | 831 MB/s | 1,150 MB/s | **1.4x** |
+| plain | 1,699 MB/s | 4,065 MB/s | **2.4x** |
+| AES-128-GCM | 1,103 MB/s | 1,864 MB/s | **1.7x** |
+| AES-256-GCM | 1,034 MB/s | 1,665 MB/s | **1.6x** |
+| ChaCha20-Poly1305 | 831 MB/s | 1,174 MB/s | **1.4x** |
 
 End-to-end integration improvements (16 KiB frames):
 
