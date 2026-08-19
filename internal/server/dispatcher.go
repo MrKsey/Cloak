@@ -263,8 +263,9 @@ func dispatchConnection(conn net.Conn, sta *State) {
 	if !existing {
 		// if the session was newly made, we serve connections from the session streams to the proxy server
 		log.WithFields(log.Fields{
-			"UID":       b64(ci.UID),
-			"sessionID": ci.SessionId,
+			"UID":        b64(ci.UID),
+			"sessionID":  ci.SessionId,
+			"remoteAddr": preparedConn.RemoteAddr(),
 		}).Info("New session")
 
 		serveSession(sesh, ci, user, sta)
